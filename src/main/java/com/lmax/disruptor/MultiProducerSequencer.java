@@ -40,7 +40,7 @@ public final class MultiProducerSequencer extends AbstractSequencer
 
     // availableBuffer tracks the state of each ringbuffer slot
     // see below for more details on the approach
-    private final int[] availableBuffer;
+    private final int[] availableBuffer; // availableBuffer是用来记录每一个ringbuffer槽的状态。
     private final int indexMask;
     private final int indexShift;
 
@@ -139,7 +139,7 @@ public final class MultiProducerSequencer extends AbstractSequencer
 
                 gatingSequenceCache.set(gatingSequence);
             }
-            else if (cursor.compareAndSet(current, next))
+            else if (cursor.compareAndSet(current, next)) // 满足消费条件，有空余的空间让生产者写入，使用CAS算法，成功则跳出本次循环，不成功则重来
             {
                 break;
             }

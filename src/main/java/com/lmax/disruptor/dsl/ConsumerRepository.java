@@ -59,7 +59,7 @@ class ConsumerRepository<T> implements Iterable<ConsumerInfo>
             eventProcessorInfoBySequence.put(sequence, workerPoolInfo);
         }
     }
-
+    // 获取当前已经消费到RingBuffer上事件队列末尾的事件处理者的序列，可通过参数指定是否要包含已经停止的事件处理者。
     public Sequence[] getLastSequenceInChain(boolean includeStopped)
     {
         List<Sequence> lastSequence = new ArrayList<>();

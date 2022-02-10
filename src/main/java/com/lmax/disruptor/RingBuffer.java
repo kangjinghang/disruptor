@@ -36,7 +36,7 @@ abstract class RingBufferFields<E> extends RingBufferPad
     static
     {
         final int scale = UNSAFE.arrayIndexScale(Object[].class);
-        if (4 == scale)
+        if (4 == scale) // 引用大小为4字节
         {
             REF_ELEMENT_SHIFT = 2;
         }
@@ -53,10 +53,10 @@ abstract class RingBufferFields<E> extends RingBufferPad
         REF_ARRAY_BASE = UNSAFE.arrayBaseOffset(Object[].class) + (BUFFER_PAD << REF_ELEMENT_SHIFT);
     }
 
-    private final long indexMask;
-    private final Object[] entries;
-    protected final int bufferSize;
-    protected final Sequencer sequencer;
+    private final long indexMask; // 下标掩码
+    private final Object[] entries; // 内部用数组来实现
+    protected final int bufferSize; // 数组长度
+    protected final Sequencer sequencer; // Single/Multi Sequencer
 
     RingBufferFields(
         EventFactory<E> eventFactory,
@@ -75,7 +75,7 @@ abstract class RingBufferFields<E> extends RingBufferPad
         }
 
         this.indexMask = bufferSize - 1;
-        this.entries = new Object[sequencer.getBufferSize() + 2 * BUFFER_PAD];
+        this.entries = new Object[sequencer.getBufferSize() + 2 * BUFFER_PAD]; // 根据引用大小进行了填充，假设引用大小为4字节，那么entries数组两侧就要个填充32个空数组位。也就是说，实际的数组长度比bufferSize要大
         fill(eventFactory);
     }
 
@@ -462,7 +462,7 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     @Override
     public void publishEvent(EventTranslator<E> translator)
     {
-        final long sequence = sequencer.next();
+        final long sequence = sequencer.next(); // 1.申请序列
         translateAndPublish(translator, sequence);
     }
 
@@ -959,11 +959,11 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     {
         try
         {
-            translator.translateTo(get(sequence), sequence);
+            translator.translateTo(get(sequence), sequence); // 2.填充事件
         }
         finally
         {
-            sequencer.publish(sequence);
+            sequencer.publish(sequence);  // 3.提交序列
         }
     }
 

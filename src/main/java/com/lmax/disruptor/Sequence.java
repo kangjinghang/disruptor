@@ -63,7 +63,7 @@ public class Sequence extends RhsPadding
     }
 
     /**
-     * Create a sequence initialised to -1.
+     * Create a sequence initialised to -1. 默认初始值为-1
      */
     public Sequence()
     {
@@ -93,7 +93,7 @@ public class Sequence extends RhsPadding
     /**
      * Perform an ordered write of this sequence.  The intent is
      * a Store/Store barrier between this write and any previous
-     * store.
+     * store. 在当前写操作和任意之前的读操作之间加入Store/Store屏障
      *
      * @param value The new value for the sequence.
      */
@@ -107,7 +107,7 @@ public class Sequence extends RhsPadding
      * a Store/Store barrier between this write and any previous
      * write and a Store/Load barrier between this write and any
      * subsequent volatile read.
-     *
+     * 在当前写操作和任意之前的读操作之间加入Store/Store屏障，在当前写操作和任意之后的读操作之间加入Store/Load屏障
      * @param value The new value for the sequence.
      */
     public void setVolatile(final long value)

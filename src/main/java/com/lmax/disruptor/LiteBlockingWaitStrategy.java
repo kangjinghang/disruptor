@@ -55,7 +55,7 @@ public final class LiteBlockingWaitStrategy implements WaitStrategy
                     }
 
                     barrier.checkAlert();
-                    processorNotifyCondition.await();
+                    processorNotifyCondition.await(); // 也是阻塞等待，但它会减少一些不必要的唤醒
                 }
                 while (cursorSequence.get() < sequence);
             }

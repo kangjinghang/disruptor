@@ -102,7 +102,7 @@ public final class PhasedBackoffWaitStrategy implements WaitStrategy
         long availableSequence;
         long startTime = 0;
         int counter = SPIN_TRIES;
-
+        // 先自旋（10000次），不行再临时让出调度（yield），不行再使用其他的策略进行等待
         do
         {
             if ((availableSequence = dependentSequence.get()) >= sequence)
@@ -110,7 +110,7 @@ public final class PhasedBackoffWaitStrategy implements WaitStrategy
                 return availableSequence;
             }
 
-            if (0 == --counter)
+            if (0 == --counter) // 先自旋（10000次）
             {
                 if (0 == startTime)
                 {

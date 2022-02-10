@@ -29,11 +29,12 @@ public final class WorkProcessor<T>
     implements EventProcessor
 {
     private final AtomicBoolean running = new AtomicBoolean(false);
-    private final Sequence sequence = new Sequence(Sequencer.INITIAL_CURSOR_VALUE);
+    private final Sequence sequence = new Sequence(Sequencer.INITIAL_CURSOR_VALUE); // 马上要去RingBuffer取数据（要处理的事件）的序列号
     private final RingBuffer<T> ringBuffer;
     private final SequenceBarrier sequenceBarrier;
     private final WorkHandler<? super T> workHandler;
     private final ExceptionHandler<? super T> exceptionHandler;
+    // 多个处理者对同一个要处理事件的竞争，所以出现了一个workSequence，多个消费者共同使用，大家都从这个sequence里取得序列号，通过CAS保证线程安全
     private final Sequence workSequence;
 
     private final EventReleaser eventReleaser = new EventReleaser()
@@ -105,17 +106,17 @@ public final class WorkProcessor<T>
     @Override
     public void run()
     {
-        if (!running.compareAndSet(false, true))
+        if (!running.compareAndSet(false, true)) // 状态设置与检测
         {
             throw new IllegalStateException("Thread is already running");
         }
-        sequenceBarrier.clearAlert();
+        sequenceBarrier.clearAlert(); // 先清除序列栅栏的通知状态
 
-        notifyStart();
+        notifyStart();  // 如果workHandler实现了LifecycleAware，这里会对其进行一个启动通知
 
-        boolean processedSequence = true;
-        long cachedAvailableSequence = Long.MIN_VALUE;
-        long nextSequence = sequence.get();
+        boolean processedSequence = true; // 标志位，用来标志一次消费过程
+        long cachedAvailableSequence = Long.MIN_VALUE; // 用来缓存消费者可以使用的RingBuffer最大序列号
+        long nextSequence = sequence.get();  // 记录下去RingBuffer取数据（要处理的事件）的序列号
         T event = null;
         while (true)
         {
@@ -126,49 +127,50 @@ public final class WorkProcessor<T>
                 // typically, this will be true
                 // this prevents the sequence getting too far forward if an exception
                 // is thrown from the WorkHandler
-                if (processedSequence)
+                if (processedSequence) // 判断上一个事件是否已经处理完毕。每次消费开始执行
                 {
-                    processedSequence = false;
+                    processedSequence = false; // 如果处理完毕，重置标识
                     do
-                    {
+                    { // 原子的获取下一要处理事件的序列值。
                         nextSequence = workSequence.get() + 1L;
                         sequence.set(nextSequence - 1L);
                     }
                     while (!workSequence.compareAndSet(nextSequence - 1L, nextSequence));
                 }
-
+                // 检查序列值是否需要申请。这一步是为了防止和事件生产者冲突。
+                // 如果可使用的最大序列号cachedAvaliableSequence大于等于我们要使用的序列号nextSequence，直接从RingBuffer取数据；不然进入else
                 if (cachedAvailableSequence >= nextSequence)
                 {
-                    event = ringBuffer.get(nextSequence);
-                    workHandler.onEvent(event);
-                    processedSequence = true;
+                    event = ringBuffer.get(nextSequence); // 从RingBuffer上获取事件
+                    workHandler.onEvent(event); // 委托给workHandler处理事件
+                    processedSequence = true; // 一次消费结束，设置事件处理完成标识
                 }
                 else
                 {
-                    cachedAvailableSequence = sequenceBarrier.waitFor(nextSequence);
+                    cachedAvailableSequence = sequenceBarrier.waitFor(nextSequence); // 如果需要申请，通过序列栅栏来申请可用的序列，等待生产者生产，获取到最大的可以使用的序列号
                 }
             }
             catch (final TimeoutException e)
             {
                 notifyTimeout(sequence.get());
             }
-            catch (final AlertException ex)
+            catch (final AlertException ex) // 处理通知
             {
-                if (!running.get())
+                if (!running.get()) //如果当前处理器被停止，那么退出主循环
                 {
                     break;
                 }
             }
             catch (final Throwable ex)
-            {
+            {   // 处理异常
                 // handle, mark as processed, unless the exception handler threw an exception
                 exceptionHandler.handleEventException(ex, nextSequence, event);
-                processedSequence = true;
+                processedSequence = true; // 如果异常处理器不抛出异常的话，就认为事件处理完毕，设置事件处理完成标识
             }
         }
-
+        // 退出主循环后，如果workHandler实现了LifecycleAware，这里会对其进行一个关闭通知
         notifyShutdown();
-
+        // 设置当前处理器状态为停止
         running.set(false);
     }
 

@@ -33,14 +33,14 @@ public final class BatchEventProcessor<T>
     private static final int IDLE = 0;
     private static final int HALTED = IDLE + 1;
     private static final int RUNNING = HALTED + 1;
-
+    // 表示当前事件处理器的运行状态
     private final AtomicInteger running = new AtomicInteger(IDLE);
-    private ExceptionHandler<? super T> exceptionHandler;
-    private final DataProvider<T> dataProvider;
-    private final SequenceBarrier sequenceBarrier;
-    private final EventHandler<? super T> eventHandler;
-    private final Sequence sequence = new Sequence(Sequencer.INITIAL_CURSOR_VALUE);
-    private final TimeoutHandler timeoutHandler;
+    private ExceptionHandler<? super T> exceptionHandler; // 异常处理器
+    private final DataProvider<T> dataProvider; // 数据提供者。(RingBuffer)
+    private final SequenceBarrier sequenceBarrier; // 序列栅栏
+    private final EventHandler<? super T> eventHandler; // 真正处理事件的回调接口
+    private final Sequence sequence = new Sequence(Sequencer.INITIAL_CURSOR_VALUE); // 事件处理器使用的序列，记录当前处理完成的最后序列值
+    private final TimeoutHandler timeoutHandler; // 超时处理器
     private final BatchStartAware batchStartAware;
 
     /**
@@ -113,10 +113,10 @@ public final class BatchEventProcessor<T>
     @Override
     public void run()
     {
-        if (running.compareAndSet(IDLE, RUNNING))
+        if (running.compareAndSet(IDLE, RUNNING)) // 状态设置与检测
         {
-            sequenceBarrier.clearAlert();
-
+            sequenceBarrier.clearAlert(); // 先清除序列栅栏的通知状态
+            // 如果eventHandler实现了LifecycleAware，这里会对其进行一个启动通知
             notifyStart();
             try
             {
@@ -127,8 +127,8 @@ public final class BatchEventProcessor<T>
             }
             finally
             {
-                notifyShutdown();
-                running.set(IDLE);
+                notifyShutdown(); // processEvents退出后，如果eventHandler实现了LifecycleAware，这里会对其进行一个停止通知。
+                running.set(IDLE);  // 设置事件处理器运行状态为停止
             }
         }
         else
@@ -150,42 +150,42 @@ public final class BatchEventProcessor<T>
     private void processEvents()
     {
         T event = null;
-        long nextSequence = sequence.get() + 1L;
+        long nextSequence = sequence.get() + 1L; // 获取要申请的序列值
 
         while (true)
         {
             try
             {
-                final long availableSequence = sequenceBarrier.waitFor(nextSequence);
+                final long availableSequence = sequenceBarrier.waitFor(nextSequence); // 通过序列栅栏来等待可用的序列值
                 if (batchStartAware != null)
                 {
                     batchStartAware.onBatchStart(availableSequence - nextSequence + 1);
                 }
-
+                // 得到可用的序列值后，【批量】处理nextSequence到availableSequence之间的事件（比如，sequence.get()=8，nextSequence=9，availableSequence=12）
                 while (nextSequence <= availableSequence)
                 {
-                    event = dataProvider.get(nextSequence);
-                    eventHandler.onEvent(event, nextSequence, nextSequence == availableSequence);
+                    event = dataProvider.get(nextSequence); // 获取事件
+                    eventHandler.onEvent(event, nextSequence, nextSequence == availableSequence); // 将事件交给eventHandler处理
                     nextSequence++;
                 }
 
-                sequence.set(availableSequence);
+                sequence.set(availableSequence); // 处理完毕后，设置为【当前处理完成的最后序列值】
             }
             catch (final TimeoutException e)
             {
-                notifyTimeout(sequence.get());
+                notifyTimeout(sequence.get()); // 如果发生超时，通知一下超时处理器(如果eventHandler同时实现了timeoutHandler，会将其设置为当前的超时处理器)
             }
             catch (final AlertException ex)
             {
-                if (running.get() != RUNNING)
+                if (running.get() != RUNNING) // 如果捕获了序列栅栏变更通知，并且当前事件处理器停止了，那么退出主循环
                 {
                     break;
                 }
             }
             catch (final Throwable ex)
             {
-                handleEventException(ex, nextSequence, event);
-                sequence.set(nextSequence);
+                handleEventException(ex, nextSequence, event); // 其他的异常都交给异常处理器进行处理
+                sequence.set(nextSequence); // 处理异常后仍然会设置当前处理的最后的序列值，然后继续处理其他事件
                 nextSequence++;
             }
         }

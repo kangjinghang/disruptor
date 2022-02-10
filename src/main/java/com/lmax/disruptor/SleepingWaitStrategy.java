@@ -77,19 +77,19 @@ public final class SleepingWaitStrategy implements WaitStrategy
         throws AlertException
     {
         barrier.checkAlert();
-
+        // 从指定的重试次数（默认是200）重试到剩下100次，这个过程是自旋。
         if (counter > 100)
         {
             --counter;
         }
-        else if (counter > 0)
+        else if (counter > 0) // 然后尝试100次让出处理器动作
         {
             --counter;
             Thread.yield();
         }
         else
         {
-            LockSupport.parkNanos(sleepTimeNs);
+            LockSupport.parkNanos(sleepTimeNs); // 然后尝试阻塞1纳秒
         }
 
         return counter;

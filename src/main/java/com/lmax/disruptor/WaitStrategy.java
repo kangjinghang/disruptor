@@ -27,13 +27,13 @@ public interface WaitStrategy
      * use for this is to signal a timeout.  Any EventProcessor that is using a WaitStrategy to get notifications
      * about message becoming available should remember to handle this case.  The {@link BatchEventProcessor} explicitly
      * handles this case and will signal a timeout if required.
-     *
-     * @param sequence          to be waited on.
+     * 等待给定的sequence变为可用
+     * @param sequence          to be waited on. 等待(申请)的序列值
      * @param cursor            the main sequence from ringbuffer. Wait/notify strategies will
-     *                          need this as it's the only sequence that is also notified upon update.
-     * @param dependentSequence on which to wait.
-     * @param barrier           the processor is waiting on.
-     * @return the sequence that is available which may be greater than the requested sequence.
+     *                          need this as it's the only sequence that is also notified upon update. ringBuffer中的主序列，也可以认为是事件发布者使用的序列
+     * @param dependentSequence on which to wait. 事件处理者使用的序列
+     * @param barrier           the processor is waiting on. 序列栅栏
+     * @return the sequence that is available which may be greater than the requested sequence. 对事件处理者来说可用的序列值，可能会比申请的序列值大
      * @throws AlertException       if the status of the Disruptor has changed.
      * @throws InterruptedException if the thread is interrupted.
      * @throws TimeoutException if a timeout occurs before waiting completes (not used by some strategies)
@@ -44,5 +44,5 @@ public interface WaitStrategy
     /**
      * Implementations should signal the waiting {@link EventProcessor}s that the cursor has advanced.
      */
-    void signalAllWhenBlocking();
+    void signalAllWhenBlocking(); // 当发布事件成功后会调用这个方法来通知等待的事件处理者序列可用了
 }

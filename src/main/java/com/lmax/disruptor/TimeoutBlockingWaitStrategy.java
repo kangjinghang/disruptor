@@ -35,7 +35,7 @@ public class TimeoutBlockingWaitStrategy implements WaitStrategy
                 while (cursorSequence.get() < sequence)
                 {
                     barrier.checkAlert();
-                    nanos = processorNotifyCondition.awaitNanos(nanos);
+                    nanos = processorNotifyCondition.awaitNanos(nanos); // 阻塞给定的时间，超过时间的话会抛出超时异常
                     if (nanos <= 0)
                     {
                         throw TimeoutException.INSTANCE;

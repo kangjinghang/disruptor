@@ -28,11 +28,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public final class WorkerPool<T>
 {
-    private final AtomicBoolean started = new AtomicBoolean(false);
-    private final Sequence workSequence = new Sequence(Sequencer.INITIAL_CURSOR_VALUE);
-    private final RingBuffer<T> ringBuffer;
+    private final AtomicBoolean started = new AtomicBoolean(false); // 运行状态标识
+    private final Sequence workSequence = new Sequence(Sequencer.INITIAL_CURSOR_VALUE); // 工作序列
+    private final RingBuffer<T> ringBuffer; // 事件队列
     // WorkProcessors are created to wrap each of the provided WorkHandlers
-    private final WorkProcessor<?>[] workProcessors;
+    private final WorkProcessor<?>[] workProcessors;  // 事件处理器数组
 
     /**
      * Create a worker pool to enable an array of {@link WorkHandler}s to consume published sequences.

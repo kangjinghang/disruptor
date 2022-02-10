@@ -58,11 +58,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class Disruptor<T>
 {
-    private final RingBuffer<T> ringBuffer;
-    private final Executor executor;
-    private final ConsumerRepository<T> consumerRepository = new ConsumerRepository<>();
-    private final AtomicBoolean started = new AtomicBoolean(false);
-    private ExceptionHandler<? super T> exceptionHandler = new ExceptionHandlerWrapper<>();
+    private final RingBuffer<T> ringBuffer; // 事件队列
+    private final Executor executor; //用于执行事件处理的执行器
+    private final ConsumerRepository<T> consumerRepository = new ConsumerRepository<>(); // 事件处理信息仓库
+    private final AtomicBoolean started = new AtomicBoolean(false); // 运行状态
+    private ExceptionHandler<? super T> exceptionHandler = new ExceptionHandlerWrapper<>(); // 异常处理器
 
     /**
      * Create a new Disruptor. Will default to {@link com.lmax.disruptor.BlockingWaitStrategy} and
@@ -537,7 +537,7 @@ public class Disruptor<T>
         final long cursor = ringBuffer.getCursor();
         for (final Sequence consumer : consumerRepository.getLastSequenceInChain(false))
         {
-            if (cursor > consumer.get())
+            if (cursor > consumer.get()) // 通过判断生产数是否大于消费数，等于表示是否还有没有被消费的事件
             {
                 return true;
             }
@@ -602,7 +602,7 @@ public class Disruptor<T>
 
     EventHandlerGroup<T> createWorkerPool(
         final Sequence[] barrierSequences, final WorkHandler<? super T>[] workHandlers)
-    {
+    {   // 创建SequenceBarrier，每次消费者要读取RingBuffer中的下一个值都要通过SequenceBarrier来获取SequenceBarrier用来协调多个消费者并发的问题
         final SequenceBarrier sequenceBarrier = ringBuffer.newBarrier(barrierSequences);
         final WorkerPool<T> workerPool = new WorkerPool<>(ringBuffer, sequenceBarrier, exceptionHandler, workHandlers);
 

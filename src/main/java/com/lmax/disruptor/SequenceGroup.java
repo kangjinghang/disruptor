@@ -42,7 +42,7 @@ public final class SequenceGroup extends Sequence
 
     /**
      * Get the minimum sequence value for the group.
-     *
+     * 获取序列组中最小的序列值
      * @return the minimum sequence value for the group.
      */
     @Override
@@ -53,7 +53,7 @@ public final class SequenceGroup extends Sequence
 
     /**
      * Set all {@link Sequence}s in the group to a given value.
-     *
+     * 将序列组中所有的序列设置为给定值
      * @param value to set the group of sequences to.
      */
     @Override
@@ -69,7 +69,7 @@ public final class SequenceGroup extends Sequence
     /**
      * Add a {@link Sequence} into this aggregate.  This should only be used during
      * initialisation.  Use {@link SequenceGroup#addWhileRunning(Cursored, Sequence)}
-     *
+     * 添加一个序列到序列组，这个方法只能在初始化的时候调用。运行时添加的话，使用addWhileRunning(Cursored, Sequence)
      * @param sequence to be added to the aggregate.
      * @see SequenceGroup#addWhileRunning(Cursored, Sequence)
      */
@@ -90,7 +90,7 @@ public final class SequenceGroup extends Sequence
 
     /**
      * Remove the first occurrence of the {@link Sequence} from this aggregate.
-     *
+     * 将序列组中出现的第一个给定的序列移除
      * @param sequence to be removed from this aggregate.
      * @return true if the sequence was removed otherwise false.
      */
@@ -101,7 +101,7 @@ public final class SequenceGroup extends Sequence
 
     /**
      * Get the size of the group.
-     *
+     * 获取序列组的大小
      * @return the size of the group.
      */
     public int size()

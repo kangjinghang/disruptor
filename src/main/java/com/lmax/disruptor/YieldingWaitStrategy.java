@@ -37,7 +37,7 @@ public final class YieldingWaitStrategy implements WaitStrategy
 
         while ((availableSequence = dependentSequence.get()) < sequence)
         {
-            counter = applyWaitMethod(barrier, counter);
+            counter = applyWaitMethod(barrier, counter); // 先自旋（100次），不行再临时让出调度（yield）
         }
 
         return availableSequence;

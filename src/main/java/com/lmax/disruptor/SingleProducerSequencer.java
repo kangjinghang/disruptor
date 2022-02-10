@@ -39,8 +39,8 @@ abstract class SingleProducerSequencerFields extends SingleProducerSequencerPad
     /**
      * Set to -1 as sequence starting point
      */
-    long nextValue = Sequence.INITIAL_VALUE;
-    long cachedValue = Sequence.INITIAL_VALUE;
+    long nextValue = Sequence.INITIAL_VALUE; // 事件发布者生产到的位置的序列值
+    long cachedValue = Sequence.INITIAL_VALUE; // 事件处理者（可能是多个）都处理完成（消费完）的序列值
 }
 
 /**
@@ -78,21 +78,27 @@ public final class SingleProducerSequencer extends SingleProducerSequencerFields
     private boolean hasAvailableCapacity(int requiredCapacity, boolean doStore)
     {
         long nextValue = this.nextValue;
-
-        long wrapPoint = (nextValue + requiredCapacity) - bufferSize;
+        // 当前序列的nextValue + requiredCapacity是事件发布者要申请的序列值。当前序列的cachedValue记录的是之前事件处理者申请的序列值。
+        // 想一下一个环形队列，事件发布者在什么情况下才能申请一个序列呢？事件发布者当前的位置在事件处理者前面，并且不能从事件处理者后面追上事件处理者（因为是环形）
+        // 即 事件发布者要申请的序列值大于事件处理者之前的序列值 且 事件发布者要申请的序列值减去环的长度要小于事件处理者的序列值
+        // 如果满足这个条件，即使不知道当前事件处理者的序列值，也能确保事件发布者可以申请给定的序列。
+        // 如果不满足这个条件，就需要查看一下当前事件处理者的最小的序列值（因为可能有多个事件处理者），
+        // 如果当前要申请的序列值比当前事件处理者的最小序列值大了一圈（从后面追上了），那就不能申请了（申请的话会覆盖没被消费的事件），
+        // 也就是说没有可用的空间（用来发布事件）了
+        long wrapPoint = (nextValue + requiredCapacity) - bufferSize; // 要申请序列值的上一圈的序列值，wrapPoint是负数，可以一直生产，如果是一个大于0的数，wrapPoint要小于等于多个消费者线程中消费的最小的序列号，即cachedValue的值
         long cachedGatingSequence = this.cachedValue;
-
+        // wrapPoint > cachedGatingSequence == true 的话，就要被套圈了
         if (wrapPoint > cachedGatingSequence || cachedGatingSequence > nextValue)
         {
             if (doStore)
             {
                 cursor.setVolatile(nextValue);  // StoreLoad fence
             }
-
+            // 所有跟踪序列的序列值和nextValue之中取的最小值
             long minSequence = Util.getMinimumSequence(gatingSequences, nextValue);
-            this.cachedValue = minSequence;
+            this.cachedValue = minSequence; // 更新缓存，事件处理者（可能是多个）都处理完成的序列值 为 minSequence
 
-            if (wrapPoint > minSequence)
+            if (wrapPoint > minSequence) // true的话，就要被套圈了
             {
                 return false;
             }
@@ -131,15 +137,15 @@ public final class SingleProducerSequencer extends SingleProducerSequencerFields
         {
             cursor.setVolatile(nextValue);  // StoreLoad fence
 
-            long minSequence;
-            while (wrapPoint > (minSequence = Util.getMinimumSequence(gatingSequences, nextValue)))
+            long minSequence; // 判断wrapPoint是否大于消费者线程最小的序列号，如果大于，不能写入，继续等待
+            while (wrapPoint > (minSequence = Util.getMinimumSequence(gatingSequences, nextValue))) // 不能被套圈
             {
-                LockSupport.parkNanos(1L); // TODO: Use waitStrategy to spin?
+                LockSupport.parkNanos(1L); // TODO: Use waitStrategy to spin? 阻塞等待一下，然后重试
             }
-
+            // 满足生产条件了，缓存这次消费者线程最小消费序号，供下次使用
             this.cachedValue = minSequence;
         }
-
+        // 缓存生产者最大生产序列号
         this.nextValue = nextSequence;
 
         return nextSequence;
@@ -185,11 +191,11 @@ public final class SingleProducerSequencer extends SingleProducerSequencerFields
 
         long consumed = Util.getMinimumSequence(gatingSequences, nextValue);
         long produced = nextValue;
-        return getBufferSize() - (produced - consumed);
+        return getBufferSize() - (produced - consumed); // 环形队列的容量减去事件发布者与事件处理者的序列差
     }
 
     /**
-     * @see Sequencer#claim(long)
+     * @see Sequencer#claim(long) 声明一个序列，这个方法只在初始化RingBuffer的时候被调用
      */
     @Override
     public void claim(long sequence)
@@ -203,8 +209,8 @@ public final class SingleProducerSequencer extends SingleProducerSequencerFields
     @Override
     public void publish(long sequence)
     {
-        cursor.set(sequence);
-        waitStrategy.signalAllWhenBlocking();
+        cursor.set(sequence); // 先设置内部游标值
+        waitStrategy.signalAllWhenBlocking(); // 然后唤醒等待的事件处理者。
     }
 
     /**
