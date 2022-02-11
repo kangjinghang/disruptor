@@ -275,12 +275,12 @@ public final class MultiProducerSequencer extends AbstractSequencer
 
     @Override
     public long getHighestPublishedSequence(long lowerBound, long availableSequence)
-    {
+    { // lowerBound：申请的序列值，availableSequence：可用的序列值
         for (long sequence = lowerBound; sequence <= availableSequence; sequence++)
-        {
-            if (!isAvailable(sequence))
+        { // 此时，sequence <= availableSequence，遍历 sequence --> availableSequence
+            if (!isAvailable(sequence)) // 找到最前一个【准备就绪】，可以被消费的event对应的序列值
             {
-                return sequence - 1;
+                return sequence - 1; // 最小值为：sequence-1
             }
         }
 

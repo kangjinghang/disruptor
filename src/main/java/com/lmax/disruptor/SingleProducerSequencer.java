@@ -39,8 +39,8 @@ abstract class SingleProducerSequencerFields extends SingleProducerSequencerPad
     /**
      * Set to -1 as sequence starting point
      */
-    long nextValue = Sequence.INITIAL_VALUE; // 事件发布者生产到的位置的序列值
-    long cachedValue = Sequence.INITIAL_VALUE; // 事件处理者（可能是多个）都处理完成（消费完）的序列值
+    long nextValue = Sequence.INITIAL_VALUE; // 事件发布者申请的要生产到的位置的序列值
+    long cachedValue = Sequence.INITIAL_VALUE; // 事件处理者（可能是多个）都处理完成（消费完）即消费最慢的处理者的序列值
 }
 
 /**
@@ -88,6 +88,9 @@ public final class SingleProducerSequencer extends SingleProducerSequencerFields
         long wrapPoint = (nextValue + requiredCapacity) - bufferSize; // 要申请序列值的上一圈的序列值，wrapPoint是负数，可以一直生产，如果是一个大于0的数，wrapPoint要小于等于多个消费者线程中消费的最小的序列号，即cachedValue的值
         long cachedGatingSequence = this.cachedValue;
         // wrapPoint > cachedGatingSequence == true 的话，就要被套圈了
+        // 如果wrapPoint比最慢消费者序号还大，代表生产者绕了一圈后又追赶上了消费者，这时候就不能继续生产了，否则把消费者还没消费的消息事件覆盖
+        // 如果wrapPoint <= 上次最慢消费者序号，说明还是连上次最慢消费者序号都没使用完，不用进入下面的if代码块，直接返回nextSequence就行了
+        // 这样做目的：每次都去获取真实的最慢消费线程序号比较浪费资源，而是获取一批可用序号后，生产者只有使用完后，才继续获取当前最慢消费线程最小序号，重新获取最新资源
         if (wrapPoint > cachedGatingSequence || cachedGatingSequence > nextValue)
         {
             if (doStore)
@@ -122,30 +125,33 @@ public final class SingleProducerSequencer extends SingleProducerSequencerFields
     @Override
     public long next(int n)
     {
-        if (n < 1)
+        if (n < 1) // n表示此次生产者期望获取多少个序号，通常是1
         {
             throw new IllegalArgumentException("n must be > 0");
         }
 
         long nextValue = this.nextValue;
-
+        // 这里n一般是1，代表申请1个可用槽位，nextValue + n 就代表了期望申请的可用槽位序号
         long nextSequence = nextValue + n;
-        long wrapPoint = nextSequence - bufferSize;
-        long cachedGatingSequence = this.cachedValue;
-
+        long wrapPoint = nextSequence - bufferSize; // 减掉RingBuffer的bufferSize值，用于判断是否出现‘绕圈覆盖’
+        long cachedGatingSequence = this.cachedValue; // cachedValue缓存【之前】获取的最慢消费者消费到的槽位序号，如果上次更新的cachedValue还没被使用完，那么就继续用上次的序号
+        // 如果wrapPoint比最慢消费者序号还大，代表生产者绕了一圈后又追赶上了消费者，这时候就不能继续生产了，否则把消费者还没消费的消息事件覆盖
+        // 如果wrapPoint <= 上次最慢消费者序号，说明还是连上次最慢消费者序号都没使用完，不用进入下面的if代码块，直接返回nextSequence就行了
+        // 这样做目的：每次都去获取真实的最慢消费线程序号比较浪费资源，而是获取一批可用序号后，生产者只有使用完后，才继续获取当前最慢消费线程最小序号，重新获取最新资源
         if (wrapPoint > cachedGatingSequence || cachedGatingSequence > nextValue)
         {
+            // cursor代表当前已经生产完成的序号，这里采用UNSAFE.putLongVolatile()插入一个StoreLoad内存屏障，主要保证cursor的真实值对所有的消费线程可见，避免不可见下消费线程无法消费问题
             cursor.setVolatile(nextValue);  // StoreLoad fence
 
-            long minSequence; // 判断wrapPoint是否大于消费者线程最小的序列号，如果大于，不能写入，继续等待
+            long minSequence; // 判断wrapPoint是否大于真实的消费者线程最小的序列号，如果大于，不能写入，继续等待
             while (wrapPoint > (minSequence = Util.getMinimumSequence(gatingSequences, nextValue))) // 不能被套圈
-            {
-                LockSupport.parkNanos(1L); // TODO: Use waitStrategy to spin? 阻塞等待一下，然后重试
+            {   // 可以看到，next()方法是一个阻塞接口，如果一直获取不到可用资源，就会一直阻塞在这里
+                LockSupport.parkNanos(1L); // TODO: Use waitStrategy to spin? 如果获取最新最慢消费线程最小序号后，依然没有可用资源，阻塞等待一下，然后重试
             }
-            // 满足生产条件了，缓存这次消费者线程最小消费序号，供下次使用
+            // 有可用资源时，将当前最慢消费序号缓存到cachedValue中，下次再申请时就可不必再进入if块中获取真实的最慢消费线程序号，只有这次获取到的被生产者使用完才会继续进入if块
             this.cachedValue = minSequence;
         }
-        // 缓存生产者最大生产序列号
+        // 申请成功，将nextValue重新设置，缓存生产者最大生产序列号，下次再申请时继续在该值基础上申请
         this.nextValue = nextSequence;
 
         return nextSequence;

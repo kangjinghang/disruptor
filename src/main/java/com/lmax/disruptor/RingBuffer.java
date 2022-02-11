@@ -62,7 +62,7 @@ abstract class RingBufferFields<E> extends RingBufferPad
         EventFactory<E> eventFactory,
         Sequencer sequencer)
     {
-        this.sequencer = sequencer;
+        this.sequencer = sequencer; // “帮手”，主要用来处理sequence申请、维护以及发布等工作
         this.bufferSize = sequencer.getBufferSize();
 
         if (bufferSize < 1)
@@ -73,10 +73,11 @@ abstract class RingBufferFields<E> extends RingBufferPad
         {
             throw new IllegalArgumentException("bufferSize must be a power of 2");
         }
-
+        // indexMask主要是为了使用位运算取模的，很多源码里都能看到这类优化
         this.indexMask = bufferSize - 1;
+        // 可以看到这个数组除了正常的size之外还有填充的元素，这个是为了解决false sharing的
         this.entries = new Object[sequencer.getBufferSize() + 2 * BUFFER_PAD]; // 根据引用大小进行了填充，假设引用大小为4字节，那么entries数组两侧就要个填充32个空数组位。也就是说，实际的数组长度比bufferSize要大
-        fill(eventFactory);
+        fill(eventFactory); // 预先填充数组元素，这对垃圾回收很优化，后续发布事件等操作都不需要创建对象，而只需要即可
     }
 
     private void fill(EventFactory<E> eventFactory)

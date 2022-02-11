@@ -25,8 +25,11 @@ public interface SequenceBarrier
     /**
      * Wait for the given sequence to be available for consumption.
      * 等待一个序列变为可用，然后消费这个序列。明显是给事件处理者使用的。
-     * @param sequence to wait for
-     * @return the sequence up to which is available
+     * @param sequence to wait for EventProcessor传入的需要进行消费的起始sequence
+     * @return the sequence up to which is available 这里并不保证返回值availableSequence一定等于given sequence，他们的大小关系取决于采用的WaitStrategy
+     *         a.YieldingWaitStrategy：在自旋100次尝试后，会直接返回dependentSequence的最小seq，这时并不保证返回值>=given sequence
+     *         b.BlockingWaitStrategy：则会阻塞等待given sequence可用为止，可用并不是说availableSequence == given sequence，而应当是指 >=
+     *         c.SleepingWaitStrategy：首选会自旋100次，然后执行100次Thread.yield()，还是不行则LockSupport.parkNanos(1L)直到availableSequence >= given sequence
      * @throws AlertException       if a status change has occurred for the Disruptor
      * @throws InterruptedException if the thread needs awaking on a condition variable.
      * @throws TimeoutException     if a timeout occurs while waiting for the supplied sequence.

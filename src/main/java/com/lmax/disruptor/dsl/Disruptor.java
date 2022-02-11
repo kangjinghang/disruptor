@@ -122,7 +122,7 @@ public class Disruptor<T>
      *
      * @param eventFactory   the factory to create events in the ring buffer.
      * @param ringBufferSize the size of the ring buffer, must be power of 2.
-     * @param threadFactory  a {@link ThreadFactory} to create threads for processors.
+     * @param threadFactory  a {@link ThreadFactory} to create threads for processors. 消费线程的创建工厂
      * @param producerType   the claim strategy to use for the ring buffer.
      * @param waitStrategy   the wait strategy to use for the ring buffer.
      */
@@ -164,7 +164,7 @@ public class Disruptor<T>
     @SafeVarargs
     public final EventHandlerGroup<T> handleEventsWith(final EventHandler<? super T>... handlers)
     {
-        return createEventProcessors(new Sequence[0], handlers);
+        return createEventProcessors(new Sequence[0], handlers); // 注意，第一个参数恒为一个空数组
     }
 
     /**
@@ -546,28 +546,28 @@ public class Disruptor<T>
     }
 
     EventHandlerGroup<T> createEventProcessors(
-        final Sequence[] barrierSequences,
+        final Sequence[] barrierSequences, // barrierSequences，是给存在依赖关系的消费者用的
         final EventHandler<? super T>[] eventHandlers)
     {
         checkNotStarted();
-
+        // 用来保存每个消费者的消费进度
         final Sequence[] processorSequences = new Sequence[eventHandlers.length];
-        final SequenceBarrier barrier = ringBuffer.newBarrier(barrierSequences);
+        final SequenceBarrier barrier = ringBuffer.newBarrier(barrierSequences); // SequenceBarrier主要是用来设置消费依赖的
 
         for (int i = 0, eventHandlersLength = eventHandlers.length; i < eventHandlersLength; i++)
         {
             final EventHandler<? super T> eventHandler = eventHandlers[i];
-
+            // 可以看到每个eventHandler会被封装成BatchEventProcessor，看名字就知道是批量处理的了吧
             final BatchEventProcessor<T> batchEventProcessor =
                 new BatchEventProcessor<>(ringBuffer, barrier, eventHandler);
-
+            // 设置异常处理器
             if (exceptionHandler != null)
             {
                 batchEventProcessor.setExceptionHandler(exceptionHandler);
             }
-
+            // 注册到consumerRepository
             consumerRepository.add(batchEventProcessor, eventHandler, barrier);
-            processorSequences[i] = batchEventProcessor.getSequence();
+            processorSequences[i] = batchEventProcessor.getSequence(); // 每一个BatchEventProcessor的消费进度
         }
 
         updateGatingSequencesForNextInChain(barrierSequences, processorSequences);

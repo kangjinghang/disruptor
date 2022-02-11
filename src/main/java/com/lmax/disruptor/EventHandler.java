@@ -33,7 +33,7 @@ public interface EventHandler<T>
      *
      * @param event      published to the {@link RingBuffer}
      * @param sequence   of the event being processed
-     * @param endOfBatch flag to indicate if this is the last event in a batch from the {@link RingBuffer}
+     * @param endOfBatch flag to indicate if this is the last event in a batch from the {@link RingBuffer} 表示消费到的本次事件是否是这个批次中的最后一个
      * @throws Exception if the EventHandler would like the exception handled further up the chain.
      */
     void onEvent(T event, long sequence, boolean endOfBatch) throws Exception;

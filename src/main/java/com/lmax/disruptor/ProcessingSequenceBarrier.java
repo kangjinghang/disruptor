@@ -52,14 +52,16 @@ final class ProcessingSequenceBarrier implements SequenceBarrier
         throws AlertException, InterruptedException, TimeoutException
     {
         checkAlert(); // 先检测报警状态
-        // 然后根据等待策略来等待可用的序列值
+        // 然后根据等待策略来等待可用的序列值，无可消费消息是该接口可能会阻塞，具体逻辑由WaitStrategy实现
         long availableSequence = waitStrategy.waitFor(sequence, cursorSequence, dependentSequence, this);
 
         if (availableSequence < sequence)
         {
-            return availableSequence;  // 如果可用的序列值小于给定的序列，那么直接返回
+            return availableSequence;  // 如果可用的序列值小于给定的要消费的序列值，那么直接返回
         }
-        // 否则，要返回能安全使用的最大的序列值
+        // 否则（availableSequence >=sequence），获取消费者可以消费的最大的可用序号，支持批处理效应，提升处理效率。
+        // 当availableSequence > sequence时，需要遍历 sequence --> availableSequence，找到最前一个准备就绪，可以被消费的event对应的seq。
+        // 最小值为：sequence-1
         return sequencer.getHighestPublishedSequence(sequence, availableSequence);
     }
 
