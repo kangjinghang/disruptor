@@ -156,20 +156,20 @@ public final class BatchEventProcessor<T>
         {
             try
             {
-                final long availableSequence = sequenceBarrier.waitFor(nextSequence); // 通过序列栅栏来等待可用的序列值
+                final long availableSequence = sequenceBarrier.waitFor(nextSequence); // 通过序列栅栏来等待可用的序列值，也就是已经被生产好的的sequence
                 if (batchStartAware != null)
                 {
                     batchStartAware.onBatchStart(availableSequence - nextSequence + 1);
                 }
                 // 得到可用的序列值后，【批量】处理nextSequence到availableSequence之间的事件（比如，sequence.get()=8，nextSequence=9，availableSequence=12）
-                while (nextSequence <= availableSequence)
+                while (nextSequence <= availableSequence) // 如果获取到的sequence大于等于nextSequence，说明有可以消费的event，从nextSequence(包含)到availableSequence(包含)这一段的事件就作为同一个批次
                 {
                     event = dataProvider.get(nextSequence); // 获取事件
                     eventHandler.onEvent(event, nextSequence, nextSequence == availableSequence); // 将事件交给eventHandler处理
                     nextSequence++;
                 }
 
-                sequence.set(availableSequence); // 处理完毕后，设置为【当前处理完成的最后序列值】
+                sequence.set(availableSequence); // 处理一批后，设置为【当前处理完成的最后序列值】，即一次性更新消费进度
             }
             catch (final TimeoutException e)
             {

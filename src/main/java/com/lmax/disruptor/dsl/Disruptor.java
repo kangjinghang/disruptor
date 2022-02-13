@@ -546,7 +546,7 @@ public class Disruptor<T>
     }
 
     EventHandlerGroup<T> createEventProcessors(
-        final Sequence[] barrierSequences, // barrierSequences，是给存在依赖关系的消费者用的
+        final Sequence[] barrierSequences, // barrierSequences，是给存在依赖关系的消费者用的，可能是个空数组
         final EventHandler<? super T>[] eventHandlers)
     {
         checkNotStarted();
@@ -574,16 +574,22 @@ public class Disruptor<T>
 
         return new EventHandlerGroup<>(this, consumerRepository, processorSequences);
     }
-
+    // barrierSequences：依赖的消费进度，processorSequences：新进消费者的进度
     private void updateGatingSequencesForNextInChain(final Sequence[] barrierSequences, final Sequence[] processorSequences)
     {
         if (processorSequences.length > 0)
         {
-            ringBuffer.addGatingSequences(processorSequences);
+            ringBuffer.addGatingSequences(processorSequences); // 1. 把新进消费者的消费进度加入到【所有消费者的消费进度数组】中
+            /*
+             * 2.如果说这个新进消费者是依赖了其他的消费者的，那么把其他的消费者从【所有消费者的消费进度数组】中移除。
+             * 这里为什么要移除呢？因为【所有消费者的消费进度数组】主要是用来获取最慢的进度的。
+             * 那么被依赖的可以不用考虑，因为它不可能比依赖它的慢。并且让这个数组足够小，可以提升计算最慢进度的性能。
+             */
             for (final Sequence barrierSequence : barrierSequences)
             {
                 ringBuffer.removeGatingSequence(barrierSequence);
             }
+            // 3.把被依赖的消费者的endOfChain属性设置成false。这个endOfChain是用来干嘛的呢？其实主要是Disruptor在shutdown的时候需要判定是否所有消费者都已经消费完了（如果依赖了别人的消费者都消费完了，那么整条链路上一定都消费完了）。
             consumerRepository.unMarkEventProcessorsAsEndOfChain(barrierSequences);
         }
     }

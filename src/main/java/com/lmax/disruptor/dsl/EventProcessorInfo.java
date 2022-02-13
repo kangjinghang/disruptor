@@ -75,7 +75,7 @@ class EventProcessorInfo<T> implements ConsumerInfo
     @Override
     public void start(final Executor executor)
     {
-        executor.execute(eventprocessor);
+        executor.execute(eventprocessor); // 这里对应的是BatchEventProcessor
     }
 
     @Override

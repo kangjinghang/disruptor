@@ -240,6 +240,6 @@ public final class SingleProducerSequencer extends SingleProducerSequencerFields
     @Override
     public long getHighestPublishedSequence(long lowerBound, long availableSequence)
     {
-        return availableSequence;
+        return availableSequence; // 单生产者，availableSequence就是已经生产好的消息的最大序列值
     }
 }

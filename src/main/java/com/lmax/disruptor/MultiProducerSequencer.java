@@ -272,7 +272,7 @@ public final class MultiProducerSequencer extends AbstractSequencer
         long bufferAddress = (index * SCALE) + BASE;
         return UNSAFE.getIntVolatile(availableBuffer, bufferAddress) == flag;
     }
-
+    // 对于多生产者模式，如果当前序列值可用，但是之前的还不可用，也是不可以的
     @Override
     public long getHighestPublishedSequence(long lowerBound, long availableSequence)
     { // lowerBound：申请的序列值，availableSequence：可用的序列值

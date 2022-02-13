@@ -52,7 +52,8 @@ public final class BlockingWaitStrategy implements WaitStrategy
                 lock.unlock();
             }
         }
-        // 再次检测，避免事件处理器关闭的情况
+        // 这里已经保证了availableSequence必然大于等于sequence，并且在存在依赖的场景中，被依赖消费者存在慢消费的话，
+        // 会直接导致下游进入死循环（此时可能造成cpu升高）。
         while ((availableSequence = dependentSequence.get()) < sequence)
         {
             barrier.checkAlert();

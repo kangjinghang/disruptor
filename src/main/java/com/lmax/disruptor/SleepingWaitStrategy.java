@@ -26,7 +26,7 @@ import java.util.concurrent.locks.LockSupport;
  * This strategy is a good compromise between performance and CPU resource.
  * Latency spikes can occur after quiet periods.  It will also reduce the impact
  * on the producing thread as it will not need signal any conditional variables
- * to wake up the event handling thread.
+ * to wake up the event handling thread. 该策略在性能和CPU资源消耗之间取得了平衡
  */
 public final class SleepingWaitStrategy implements WaitStrategy
 {
@@ -77,19 +77,19 @@ public final class SleepingWaitStrategy implements WaitStrategy
         throws AlertException
     {
         barrier.checkAlert();
-        // 从指定的重试次数（默认是200）重试到剩下100次，这个过程是自旋。
+        // 从指定的重试次数（默认是200）重试到剩下100次，这个过程是自旋，相当于最快速的响应，即最高性能
         if (counter > 100)
         {
             --counter;
         }
-        else if (counter > 0) // 然后尝试100次让出处理器动作
+        else if (counter > 0) // 然后尝试100次让出处理器动作，即最省CPU，但是响应最慢
         {
             --counter;
             Thread.yield();
         }
         else
         {
-            LockSupport.parkNanos(sleepTimeNs); // 然后尝试阻塞1纳秒
+            LockSupport.parkNanos(sleepTimeNs); // 其他时候尝试阻塞1纳秒
         }
 
         return counter;

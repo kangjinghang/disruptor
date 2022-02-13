@@ -38,7 +38,8 @@ public final class ThreadHints
 
         MethodHandle methodHandle = null;
         try
-        {
+        {   // 就是Thread类的onSpinWait方法，如果Thread类没有onSpinWait方法，那么使用BusySpinWaitStrategy作为等待策略就有很高的代价了，环形队列里没有数据时消费线程会执行自旋，很耗费CPU
+            // 这方法是从JDK9才有的，所以对于JDK8使用者来说来说，选用BusySpinWaitStrategy就意味着要面对没做啥事儿的while循环了
             methodHandle = lookup.findStatic(Thread.class, "onSpinWait", methodType(void.class));
         }
         catch (final Exception ignore)

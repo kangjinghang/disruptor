@@ -85,9 +85,9 @@ public interface Sequencer extends Cursored, Sequenced
      * is 1 higher than the last sequence that was successfully processed.
      * 获取RingBuffer上安全使用的最大的序列值。具体实现里面，这个调用可能需要序列上从nextSequence到availableSequence之间的值。
      * 如果没有比nextSequence大的可用序列，会返回nextSequence - 1。为了保证正确，事件处理者应该传递一个比最后的序列值大1个单位的序列来处理。
-     * @param nextSequence      The sequence to start scanning from.
+     * @param nextSequence      The sequence to start scanning from. 申请的序列值
      * @param availableSequence The sequence to scan to.
-     * @return The highest value that can be safely read, will be at least <code>nextSequence - 1</code>.
+     * @return The highest value that can be safely read, will be at least <code>nextSequence - 1</code>. 已经生产好的事件的最大序列值
      */
     long getHighestPublishedSequence(long nextSequence, long availableSequence);
     // 通过给定的数据提供者和控制序列来创建一个EventPoller

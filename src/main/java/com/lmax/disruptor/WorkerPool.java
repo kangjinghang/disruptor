@@ -63,7 +63,7 @@ public final class WorkerPool<T>
                 sequenceBarrier,
                 workHandlers[i],
                 exceptionHandler,
-                workSequence);
+                workSequence); // 多个事件处理者WorkProcessor会共用这一个workSequence记录消费进度，来实现多个事件处理者共同消费
         }
     }
 

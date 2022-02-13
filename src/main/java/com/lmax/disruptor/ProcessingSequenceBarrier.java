@@ -39,7 +39,7 @@ final class ProcessingSequenceBarrier implements SequenceBarrier
         this.cursorSequence = cursorSequence;
         if (0 == dependentSequences.length)
         {
-            dependentSequence = cursorSequence;
+            dependentSequence = cursorSequence; // dependentSequence = cursorSequence = cursor
         }
         else
         {

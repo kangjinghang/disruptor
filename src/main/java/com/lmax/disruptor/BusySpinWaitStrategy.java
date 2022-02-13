@@ -36,7 +36,7 @@ public final class BusySpinWaitStrategy implements WaitStrategy
         while ((availableSequence = dependentSequence.get()) < sequence)
         {   // 自旋
             barrier.checkAlert();
-            ThreadHints.onSpinWait();
+            ThreadHints.onSpinWait(); // 关键就是ThreadHints.onSpinWait做了什么，如果ON_SPIN_WAIT_METHOD_HANDLE为空，意味着外面的while循环是个非常消耗CPU的自旋
         }
 
         return availableSequence;
