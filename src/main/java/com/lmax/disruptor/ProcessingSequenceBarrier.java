@@ -51,7 +51,7 @@ final class ProcessingSequenceBarrier implements SequenceBarrier
     public long waitFor(final long sequence)
         throws AlertException, InterruptedException, TimeoutException
     {
-        checkAlert(); // 先检测报警状态
+        checkAlert(); // 每次请求可用序列值时，会先检测报警状态，如果 alerted = true，会直接抛出异常，由上层处理
         // 然后根据等待策略来等待可用的序列值，无可消费消息是该接口可能会阻塞，具体逻辑由WaitStrategy实现
         long availableSequence = waitStrategy.waitFor(sequence, cursorSequence, dependentSequence, this);
 
