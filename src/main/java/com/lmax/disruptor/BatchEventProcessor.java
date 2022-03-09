@@ -80,7 +80,7 @@ public final class BatchEventProcessor<T>
     @Override
     public void halt()
     {
-        running.set(HALTED);
+        running.set(HALTED); // 这里设置为 HALTED，配合 180 行 退出 processEvents 使用
         sequenceBarrier.alert();
     }
 
