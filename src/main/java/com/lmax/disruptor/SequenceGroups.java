@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
  */
 class SequenceGroups
 {
-    static <T> void addSequences(
+    static <T> void addSequences( // 使用 updater 把 sequencesToAdd 这个数组添加到 holder 这个对象持有的 Sequence数组里面，sequencesToAdd 这个数组 这个值设置为 cursor 的值
         final T holder,
         final AtomicReferenceFieldUpdater<T, Sequence[]> updater,
         final Cursored cursor,
@@ -36,23 +36,23 @@ class SequenceGroups
 
         do
         {
-            currentSequences = updater.get(holder);
-            updatedSequences = copyOf(currentSequences, currentSequences.length + sequencesToAdd.length);
+            currentSequences = updater.get(holder); // 得到追踪序列数组，即 AbstractSequencer 的 gatingSequences 字段
+            updatedSequences = copyOf(currentSequences, currentSequences.length + sequencesToAdd.length); // 扩充数组
             cursorSequence = cursor.getCursor();
 
             int index = currentSequences.length;
-            for (Sequence sequence : sequencesToAdd)
+            for (Sequence sequence : sequencesToAdd) // 循环新加入的追踪序列数组
             {
-                sequence.set(cursorSequence);
-                updatedSequences[index++] = sequence;
+                sequence.set(cursorSequence); // 把 Cursored 接口得到的序列号设置给新加入的追踪序列
+                updatedSequences[index++] = sequence; // 把新加入的追踪序列设置给扩充好的追踪序列数组
             }
         }
-        while (!updater.compareAndSet(holder, currentSequences, updatedSequences));
+        while (!updater.compareAndSet(holder, currentSequences, updatedSequences)); // CAS 更新
 
         cursorSequence = cursor.getCursor();
-        for (Sequence sequence : sequencesToAdd)
+        for (Sequence sequence : sequencesToAdd) // 再次循环新加入的追踪序列数组
         {
-            sequence.set(cursorSequence);
+            sequence.set(cursorSequence); // 把 Cursored 接口得到的序列号设置给新加入的追踪序列
         }
     }
 

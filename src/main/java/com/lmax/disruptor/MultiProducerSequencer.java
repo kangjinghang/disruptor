@@ -40,7 +40,7 @@ public final class MultiProducerSequencer extends AbstractSequencer
 
     // availableBuffer tracks the state of each ringbuffer slot
     // see below for more details on the approach
-    private final int[] availableBuffer; // availableBuffer是用来记录每一个ringbuffer槽的状态。
+    private final int[] availableBuffer; // availableBuffer是用来记录每一个ringbuffer槽的状态，size大小和RingBuffer的Size一样大
     private final int indexMask;
     private final int indexShift;
 
@@ -139,8 +139,8 @@ public final class MultiProducerSequencer extends AbstractSequencer
 
                 gatingSequenceCache.set(gatingSequence);
             }
-            else if (cursor.compareAndSet(current, next)) // 满足消费条件，有空余的空间让生产者写入，使用CAS算法，成功则跳出本次循环，不成功则重来
-            {
+            else if (cursor.compareAndSet(current, next)) // 满足消费条件，有空余的空间让生产者写入，使用CAS算法更新生产者申请占用的进度（因为这是多生产模式，要保证线程安全），成功则跳出本次循环，不成功则重来
+            {  // 多生产者模式 next() 就会更新cursor，而单生产者模式 publish() 的时候会更新，next() 的时候有时候会更新
                 break;
             }
         }
@@ -214,8 +214,8 @@ public final class MultiProducerSequencer extends AbstractSequencer
     @Override
     public void publish(final long sequence)
     {
-        setAvailable(sequence);
-        waitStrategy.signalAllWhenBlocking();
+        setAvailable(sequence); // publish 完成的时候，将当前序列值的可用状态记录到availableBuffer里面，而记录的这个值其实就是sequence除以bufferSize，也就是当前sequence绕buffer的圈数。消费的时候也用相同算法计算是否可用消费
+        waitStrategy.signalAllWhenBlocking();  // 然后唤醒等待的事件处理者
     }
 
     /**
@@ -250,11 +250,11 @@ public final class MultiProducerSequencer extends AbstractSequencer
      * buffer), when we have new data and successfully claimed a slot we can simply
      * write over the top.
      */
-    private void setAvailable(final long sequence)
+    private void setAvailable(final long sequence) // 当前序列值的可用状态记录到availableBuffer里面，而记录的这个值其实就是sequence除以bufferSize，也就是当前sequence绕buffer的圈数
     {
         setAvailableBufferValue(calculateIndex(sequence), calculateAvailabilityFlag(sequence));
     }
-
+    // 将数组中指定 index 位置设置为 flag
     private void setAvailableBufferValue(int index, int flag)
     {
         long bufferAddress = (index * SCALE) + BASE;
@@ -267,18 +267,18 @@ public final class MultiProducerSequencer extends AbstractSequencer
     @Override
     public boolean isAvailable(long sequence)
     {
-        int index = calculateIndex(sequence);
-        int flag = calculateAvailabilityFlag(sequence);
+        int index = calculateIndex(sequence); // 计算 sequence 在唤醒队列上的索引
+        int flag = calculateAvailabilityFlag(sequence); // 计算sequence绕buffer的圈数
         long bufferAddress = (index * SCALE) + BASE;
-        return UNSAFE.getIntVolatile(availableBuffer, bufferAddress) == flag;
+        return UNSAFE.getIntVolatile(availableBuffer, bufferAddress) == flag; // 上面计算得到的值和已保存的是否相等，相等说明生产者已经发布好了，调用这个方法的消费者可以消费了
     }
-    // 对于多生产者模式，如果当前序列值可用，但是之前的还不可用，也是不可以的
-    @Override
+    // 对于多生产者模式，如果当前序列值可用，但是之前的还不可用，也是不可以的，多生产可能由"空洞"（生产者调用了 next()，但是还没调用 publish() ）
+    @Override // 多生产者模式 next() 就会更新cursor，而单生产者模式 publish() 的时候会更新，next() 的时候有时候会更新
     public long getHighestPublishedSequence(long lowerBound, long availableSequence)
-    { // lowerBound：申请的序列值，availableSequence：可用的序列值
+    { // lowerBound：生产者申请的序列值，availableSequence：消费者策略返回的可用的、可以被消费的序列值
         for (long sequence = lowerBound; sequence <= availableSequence; sequence++)
         { // 此时，sequence <= availableSequence，遍历 sequence --> availableSequence
-            if (!isAvailable(sequence)) // 找到最前一个【准备就绪】，可以被消费的event对应的序列值
+            if (!isAvailable(sequence)) // 找到最前一个【准备就绪】，可以被消费的event对应的序列值。!isAvailable(sequence) 说明是 这个槽位消费过了，但是生产者还没生产到这里，由"空洞"
             {
                 return sequence - 1; // 最小值为：sequence-1
             }

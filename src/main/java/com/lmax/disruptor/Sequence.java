@@ -43,7 +43,7 @@ class RhsPadding extends Value
  * <p>Also attempts to be more efficient with regards to false
  * sharing by adding padding around the volatile field.
  */
-public class Sequence extends RhsPadding
+public class Sequence extends RhsPadding // 是一个递增的序号（递增的 long），说白了就是计数器；其次，由于需要在线程间共享，所以Sequence是引用传递，并且是线程安全的；再次，Sequence支持CAS操作；最后，为了提高效率，Sequence通过padding来避免伪共享。
 {
     static final long INITIAL_VALUE = -1L;
     private static final Unsafe UNSAFE;

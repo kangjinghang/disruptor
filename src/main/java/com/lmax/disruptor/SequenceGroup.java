@@ -69,7 +69,7 @@ public final class SequenceGroup extends Sequence
     /**
      * Add a {@link Sequence} into this aggregate.  This should only be used during
      * initialisation.  Use {@link SequenceGroup#addWhileRunning(Cursored, Sequence)}
-     * 添加一个序列到序列组，这个方法只能在初始化的时候调用。运行时添加的话，使用addWhileRunning(Cursored, Sequence)
+     * 添加一个序列到序列组，这个方法只能在初始化的时候调用。运行时添加的话，使用 addWhileRunning(Cursored, Sequence)
      * @param sequence to be added to the aggregate.
      * @see SequenceGroup#addWhileRunning(Cursored, Sequence)
      */
@@ -113,7 +113,7 @@ public final class SequenceGroup extends Sequence
      * Adds a sequence to the sequence group after threads have started to publish to
      * the Disruptor.  It will set the sequences to cursor value of the ringBuffer
      * just after adding them.  This should prevent any nasty rewind/wrapping effects.
-     *
+     * 在线程已经开始往Disruptor上发布事件后，运行时添加一个序列到序列组。调用这个方法后，会将新添加的序列的值设置为游标的值。
      * @param cursored The data structure that the owner of this sequence group will
      *                 be pulling it's events from.
      * @param sequence The sequence to add.

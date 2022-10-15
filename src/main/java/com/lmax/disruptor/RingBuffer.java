@@ -29,28 +29,28 @@ abstract class RingBufferPad
 abstract class RingBufferFields<E> extends RingBufferPad
 {
     private static final int BUFFER_PAD;
-    private static final long REF_ARRAY_BASE;
-    private static final int REF_ELEMENT_SHIFT;
+    private static final long REF_ARRAY_BASE; // 因为entries数组两侧有空数组位，所以这是"真实"的数组开始的位置，真实数据偏移了128个字节
+    private static final int REF_ELEMENT_SHIFT; // 计算数组中元素物理位置的时候需要用 数组索引*引用大小，REF_ELEMENT_SHIFT 表示要左移多少位
     private static final Unsafe UNSAFE = Util.getUnsafe();
 
     static
     {
         final int scale = UNSAFE.arrayIndexScale(Object[].class);
-        if (4 == scale) // 引用大小为4字节
+        if (4 == scale) // 引用大小为4字节，32位机器或者64位机器开启了指针压缩
         {
-            REF_ELEMENT_SHIFT = 2;
+            REF_ELEMENT_SHIFT = 2; // 引用大小为4字节，就要左移 2 位
         }
         else if (8 == scale)
         {
-            REF_ELEMENT_SHIFT = 3;
+            REF_ELEMENT_SHIFT = 3; // 引用大小为8字节，就要左移 3 位
         }
         else
         {
             throw new IllegalStateException("Unknown pointer size");
         }
-        BUFFER_PAD = 128 / scale;
+        BUFFER_PAD = 128 / scale; // 32位机器或者64位机器开启了指针压缩的话就是 32，未开启指针压缩的64位机器话就是 16
         // Including the buffer pad in the array base offset
-        REF_ARRAY_BASE = UNSAFE.arrayBaseOffset(Object[].class) + (BUFFER_PAD << REF_ELEMENT_SHIFT);
+        REF_ARRAY_BASE = UNSAFE.arrayBaseOffset(Object[].class) + (BUFFER_PAD << REF_ELEMENT_SHIFT);  // 引用大小为4字节，REF_ARRAY_BASE 是真实数据开始的指针位置，数组开始位置就加上 32*4=128个字节。引用大小为8字节，组开始位置就加上 16*8=128个字节
     }
 
     private final long indexMask; // 下标掩码
@@ -76,7 +76,7 @@ abstract class RingBufferFields<E> extends RingBufferPad
         // indexMask主要是为了使用位运算取模的，很多源码里都能看到这类优化
         this.indexMask = bufferSize - 1;
         // 可以看到这个数组除了正常的size之外还有填充的元素，这个是为了解决false sharing的
-        this.entries = new Object[sequencer.getBufferSize() + 2 * BUFFER_PAD]; // 根据引用大小进行了填充，假设引用大小为4字节，那么entries数组两侧就要个填充32个空数组位。也就是说，实际的数组长度比bufferSize要大
+        this.entries = new Object[sequencer.getBufferSize() + 2 * BUFFER_PAD]; // 根据引用大小进行了填充，假设引用大小为8字节，那么entries数组两侧就要填充32个空数组位。也就是说，实际的数组长度比bufferSize要大
         fill(eventFactory); // 预先填充数组元素，这对垃圾回收很优化，后续发布事件等操作都不需要创建对象，而只需要即可
     }
 
@@ -84,14 +84,14 @@ abstract class RingBufferFields<E> extends RingBufferPad
     {
         for (int i = 0; i < bufferSize; i++)
         {
-            entries[BUFFER_PAD + i] = eventFactory.newInstance();
+            entries[BUFFER_PAD + i] = eventFactory.newInstance(); // 两次填充空数组位，所以从 BUFFER_PAD 真正开始
         }
     }
 
     @SuppressWarnings("unchecked")
     protected final E elementAt(long sequence)
     {
-        return (E) UNSAFE.getObject(entries, REF_ARRAY_BASE + ((sequence & indexMask) << REF_ELEMENT_SHIFT));
+        return (E) UNSAFE.getObject(entries, REF_ARRAY_BASE + ((sequence & indexMask) << REF_ELEMENT_SHIFT)); // 真实数据开始的物理位置+所在索引位置*引用大小
     }
 }
 
@@ -194,7 +194,7 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
 
     /**
      * Create a new Ring Buffer with the specified producer type (SINGLE or MULTI)
-     *
+     * 静态工厂方法
      * @param <E> Class of the event stored in the ring buffer.
      * @param producerType producer type to use {@link ProducerType}.
      * @param factory      used to create events within the ring buffer.
@@ -365,7 +365,7 @@ public final class RingBuffer<E> extends RingBufferFields<E> implements Cursored
     /**
      * Add the specified gating sequences to this instance of the Disruptor.  They will
      * safely and atomically added to the list of gating sequences.
-     *
+     * 完成了消费者和生产者之间的关联。多个消费者的时候，生产者要考虑消费者们 gatingSequences 的最小消费进度，这样生产者可以检测消费者进度避免覆盖未消费数据
      * @param gatingSequences The sequences to add.
      */
     public void addGatingSequences(Sequence... gatingSequences)

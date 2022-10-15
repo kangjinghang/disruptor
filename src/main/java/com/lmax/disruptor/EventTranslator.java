@@ -29,8 +29,8 @@ public interface EventTranslator<T>
     /**
      * Translate a data representation into fields set in given event
      *
-     * @param event    into which the data should be translated.
-     * @param sequence that is assigned to event.
+     * @param event    into which the data should be translated. 因为唤醒队列在初始化的时候就填充好了，sequence对应唤醒队列位置上的对象（原来初始化好的）
+     * @param sequence that is assigned to event. 申请的序号
      */
     void translateTo(T event, long sequence);
 }

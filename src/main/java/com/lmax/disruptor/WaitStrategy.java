@@ -21,17 +21,17 @@ package com.lmax.disruptor;
  */
 public interface WaitStrategy
 {
-    /**
+    /** 第一重判断：消费者消费的序号不能超过当前生产者消费当前生产的序号。第二重判断：消费者消费的序号不能超过【其前面依赖的消费者】消费的序号
      * Wait for the given sequence to be available.  It is possible for this method to return a value
      * less than the sequence number supplied depending on the implementation of the WaitStrategy.  A common
      * use for this is to signal a timeout.  Any EventProcessor that is using a WaitStrategy to get notifications
      * about message becoming available should remember to handle this case.  The {@link BatchEventProcessor} explicitly
      * handles this case and will signal a timeout if required.
-     * 等待给定的sequence变为可用
-     * @param sequence          to be waited on. 等待(申请)的序列值
+     * 等待给定的sequence变为可用，比如 sequence=2，申请2号位置来消费，这个方法返回10，10之前的都可以消费了（不止是2之前的）
+     * @param sequence          to be waited on. 消费者等待消费的序列值
      * @param cursor            the main sequence from ringbuffer. Wait/notify strategies will
-     *                          need this as it's the only sequence that is also notified upon update. ringBuffer中的主序列，也可以认为是事件发布者使用的序列
-     * @param dependentSequence on which to wait. 事件处理者使用的序列
+     *                          need this as it's the only sequence that is also notified upon update. 事件发布者的生产进度
+     * @param dependentSequence on which to wait. 事件处理者依赖的最小消费进度序列，第一个消费者即前面不依赖任何消费者的消费者，dependentSequence 就是生产者游标，有依赖其他消费者的消费者，dependentSequence 就是所依赖的消费者的 sequence
      * @param barrier           the processor is waiting on. 序列栅栏
      * @return the sequence that is available which may be greater than the requested sequence. 对事件处理者来说可用的序列值，可能会比申请的序列值大
      * @throws AlertException       if the status of the Disruptor has changed.

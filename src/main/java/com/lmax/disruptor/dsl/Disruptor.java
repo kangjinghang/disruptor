@@ -215,7 +215,7 @@ public class Disruptor<T>
         {
             sequences[i] = processors[i].getSequence();
         }
-
+        // 把执行器链最后一个消费者消费进度关联给生产者。多个消费者的时候，生产者要考虑消费者们 gatingSequences 的最小消费进度，这样生产者可以检测消费者进度避免覆盖未消费数据
         ringBuffer.addGatingSequences(sequences);
 
         return new EventHandlerGroup<>(this, consumerRepository, Util.getSequencesFor(processors));
@@ -296,10 +296,10 @@ public class Disruptor<T>
     {
         final Sequence[] sequences = new Sequence[handlers.length];
         for (int i = 0, handlersLength = handlers.length; i < handlersLength; i++)
-        {
+        { // 获取指定的EventHandler的消费者sequence并赋值给sequences数组，
             sequences[i] = consumerRepository.getSequenceFor(handlers[i]);
         }
-
+        // 重新新建一个EventHandlerGroup实例返回（封装了前面的指定的消费者 sequences数组 被赋值给了 EventHandlerGroup 的成员变量数组 sequences，用于传递给下一个消费者作为其 sequenceBarrier 即 dependentSequence）
         return new EventHandlerGroup<>(this, consumerRepository, sequences);
     }
 
@@ -398,9 +398,9 @@ public class Disruptor<T>
     public RingBuffer<T> start()
     {
         checkOnlyStartedOnce();
-        for (final ConsumerInfo consumerInfo : consumerRepository)
+        for (final ConsumerInfo consumerInfo : consumerRepository) // 负责启动所有的消费者对象，ConsumerInfo对象是EventProcessorInfo
         {
-            consumerInfo.start(executor);
+            consumerInfo.start(executor); // 通过executor启动consumer对象，
         }
 
         return ringBuffer;
@@ -546,20 +546,20 @@ public class Disruptor<T>
     }
 
     EventHandlerGroup<T> createEventProcessors(
-        final Sequence[] barrierSequences, // barrierSequences，是给存在依赖关系的消费者用的，可能是个空数组
+        final Sequence[] barrierSequences, // barrierSequences，是给存在依赖关系的消费者用的，可能是个空数组（handleEventsWith()时）。这个方法里面会设置上processorSequences，这样如果再调用 then 会把 processorSequences 传过去
         final EventHandler<? super T>[] eventHandlers)
     {
         checkNotStarted();
-        // 用来保存每个消费者的消费进度
-        final Sequence[] processorSequences = new Sequence[eventHandlers.length];
-        final SequenceBarrier barrier = ringBuffer.newBarrier(barrierSequences); // SequenceBarrier主要是用来设置消费依赖的
-
+        // 用来保存每个消费者的消费进度。比如有执行顺序链：A->B，那么A的 sequence 即 processorSequences 会作为B节点的 barrierSequences 的 dependencySequence
+        final Sequence[] processorSequences = new Sequence[eventHandlers.length]; // 每个消费者配备一个Sequence对象，应该需要申请一个Sequence数组，processorSequences是传递到EventHandlerGroup用于构建执行顺序链用的，
+        final SequenceBarrier barrier = ringBuffer.newBarrier(barrierSequences); // 序号屏障，通过追踪生产者的cursorSequence和每个消费者（ EventProcessor）的sequence的方式来协调生产者和消费者之间的数据交换进度，所有消费者公用一个SequenceBarrier对象，这个SequenceBarrier会传递到消费者当中
+        // 如果构建执行顺序链比如A->B，那么 barrierSequences 是A消费者的 sequence；如果是A,C->B，那么 barrierSequences 是A和C消费者的 sequence
         for (int i = 0, eventHandlersLength = eventHandlers.length; i < eventHandlersLength; i++)
         {
             final EventHandler<? super T> eventHandler = eventHandlers[i];
             // 可以看到每个eventHandler会被封装成BatchEventProcessor，看名字就知道是批量处理的了吧
             final BatchEventProcessor<T> batchEventProcessor =
-                new BatchEventProcessor<>(ringBuffer, barrier, eventHandler);
+                new BatchEventProcessor<>(ringBuffer, barrier, eventHandler); // 共用同一个SequenceBarrier实例
             // 设置异常处理器
             if (exceptionHandler != null)
             {
@@ -567,29 +567,29 @@ public class Disruptor<T>
             }
             // 注册到consumerRepository
             consumerRepository.add(batchEventProcessor, eventHandler, barrier);
-            processorSequences[i] = batchEventProcessor.getSequence(); // 每一个BatchEventProcessor的消费进度
+            processorSequences[i] = batchEventProcessor.getSequence(); // 获取到每个消费者的消费sequece并赋值给processorSequences数组，即processorSequences[i]引用了BatchEventProcessor的sequence实例，但 processorSequences[i] 又是构建生产者 gatingSequence 和消费者执行器链 dependentSequence 的来源
         }
-
+        // 总是拿执行器链最后一个消费者的sequence作为生产者的 gateingSequence 就可以了（因为它消费是最慢的）
         updateGatingSequencesForNextInChain(barrierSequences, processorSequences);
-
+        // 当前最后一个消费者的 processorSequences 通过 EventHandlerGroup 这个载体来传递给下一个消费者作为其 sequenceBarrier 即 dependentSequence
         return new EventHandlerGroup<>(this, consumerRepository, processorSequences);
     }
-    // barrierSequences：依赖的消费进度，processorSequences：新进消费者的进度
+    // barrierSequences：新进消费者们依赖的消费进度，processorSequences：新进消费者（handleEventsWith() / then() / after() 传进来的）的进度
     private void updateGatingSequencesForNextInChain(final Sequence[] barrierSequences, final Sequence[] processorSequences)
     {
         if (processorSequences.length > 0)
-        {
+        {   // ringBuffer 生产者要跟踪 新进消费者 的 processorSequences 消费进度才能做好数据协调
             ringBuffer.addGatingSequences(processorSequences); // 1. 把新进消费者的消费进度加入到【所有消费者的消费进度数组】中
             /*
              * 2.如果说这个新进消费者是依赖了其他的消费者的，那么把其他的消费者从【所有消费者的消费进度数组】中移除。
              * 这里为什么要移除呢？因为【所有消费者的消费进度数组】主要是用来获取最慢的进度的。
-             * 那么被依赖的可以不用考虑，因为它不可能比依赖它的慢。并且让这个数组足够小，可以提升计算最慢进度的性能。
+             * 那么被依赖的可以不用考虑，因为【它不可能比依赖它的慢】（阶段消费，当前stage进度肯定会比上一stage慢的）。这样可以让这个数组足够小，可以提升计算最慢进度的性能。
              */
             for (final Sequence barrierSequence : barrierSequences)
             {
-                ringBuffer.removeGatingSequence(barrierSequence);
+                ringBuffer.removeGatingSequence(barrierSequence); // 把 新进消费者们【依赖】的消费进度 移出去
             }
-            // 3.把被依赖的消费者的endOfChain属性设置成false。这个endOfChain是用来干嘛的呢？其实主要是Disruptor在shutdown的时候需要判定是否所有消费者都已经消费完了（如果依赖了别人的消费者都消费完了，那么整条链路上一定都消费完了）。
+            // 3.把 新进消费者们依赖的消费进度 对应的 被依赖的消费者 的endOfChain属性设置成false。这个endOfChain是用来干嘛的呢？其实主要是Disruptor在shutdown的时候需要判定是否所有消费者都已经消费完了（如果依赖了别人的消费者都消费完了，那么整条链路上一定都消费完了）。
             consumerRepository.unMarkEventProcessorsAsEndOfChain(barrierSequences);
         }
     }
@@ -609,14 +609,14 @@ public class Disruptor<T>
     EventHandlerGroup<T> createWorkerPool(
         final Sequence[] barrierSequences, final WorkHandler<? super T>[] workHandlers)
     {   // 创建SequenceBarrier，每次消费者要读取RingBuffer中的下一个值都要通过SequenceBarrier来获取SequenceBarrier用来协调多个消费者并发的问题
-        final SequenceBarrier sequenceBarrier = ringBuffer.newBarrier(barrierSequences);
+        final SequenceBarrier sequenceBarrier = ringBuffer.newBarrier(barrierSequences); // 所有消费者公用一个SequenceBarrier对象，这个SequenceBarrier会传递到消费者当中
         final WorkerPool<T> workerPool = new WorkerPool<>(ringBuffer, sequenceBarrier, exceptionHandler, workHandlers);
 
 
         consumerRepository.add(workerPool, sequenceBarrier);
 
         final Sequence[] workerSequences = workerPool.getWorkerSequences();
-
+        // barrierSequences：WorkHandler们依赖的消费进度，workerSequences：WorkHandler们自己的消费进度
         updateGatingSequencesForNextInChain(barrierSequences, workerSequences);
 
         return new EventHandlerGroup<>(this, consumerRepository, workerSequences);

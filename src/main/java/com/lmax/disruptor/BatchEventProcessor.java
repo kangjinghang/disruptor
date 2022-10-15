@@ -37,7 +37,7 @@ public final class BatchEventProcessor<T>
     private final AtomicInteger running = new AtomicInteger(IDLE);
     private ExceptionHandler<? super T> exceptionHandler; // 异常处理器
     private final DataProvider<T> dataProvider; // 数据提供者。(RingBuffer)
-    private final SequenceBarrier sequenceBarrier; // 序列栅栏
+    private final SequenceBarrier sequenceBarrier; // 序列栅栏，初始化的时候传递进来的，批量增加（相同阶段）的消费者们会公用一个sequenceBarrier对象。
     private final EventHandler<? super T> eventHandler; // 真正处理事件的回调接口
     private final Sequence sequence = new Sequence(Sequencer.INITIAL_CURSOR_VALUE); // 事件处理器使用的序列，记录当前处理完成的最后序列值
     private final TimeoutHandler timeoutHandler; // 超时处理器
@@ -155,7 +155,7 @@ public final class BatchEventProcessor<T>
         while (true)
         {
             try
-            {
+            {   // 在sequenceBarrier.waitFor()内部会执行waitStrategy.waitFor()方法实现生产者和消费者之间的通信
                 final long availableSequence = sequenceBarrier.waitFor(nextSequence); // 通过序列栅栏来等待可用的序列值，也就是已经被生产好的的sequence
                 if (batchStartAware != null)
                 {
@@ -167,8 +167,8 @@ public final class BatchEventProcessor<T>
                     event = dataProvider.get(nextSequence); // 获取事件
                     eventHandler.onEvent(event, nextSequence, nextSequence == availableSequence); // 将事件交给eventHandler处理
                     nextSequence++;
-                }
-
+                } // 【1】如果当前消费者是执行链的最后一个消费者，那么其sequence则是生产者的gatingSequence，因为生产者就是拿要生产的下一个sequence跟gatingSequence做比较的哈
+                // 【2】如果当前消费者不是执行器链的最后一个消费者，那么其sequence作为后面消费者的dependentSequence
                 sequence.set(availableSequence); // 处理一批后，设置为【当前处理完成的最后序列值】，即一次性更新消费进度
             }
             catch (final TimeoutException e)

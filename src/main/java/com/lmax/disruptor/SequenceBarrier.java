@@ -19,9 +19,9 @@ package com.lmax.disruptor;
 /**
  * Coordination barrier for tracking the cursor for publishers and sequence of
  * dependent {@link EventProcessor}s for processing a data structure
- */
-public interface SequenceBarrier
-{
+ */ // 通过追踪生产者的cursorSequence和每个消费者（ EventProcessor）的sequence的方式来协调生产者和消费者之间的数据交换进度
+public interface SequenceBarrier // 主要是设置消费【依赖】的。比如某个消费者必须等它依赖的消费者消费完某个消息之后才可以消费该消息（多阶段流程编排，产生依赖）
+{ // sequenceBarrier 底层逻辑实质是当前消费者的消费 sequence 跟生产者的生产 cursor 做比较，保证消费者消费不能赶上生产者
     /**
      * Wait for the given sequence to be available for consumption.
      * 等待一个序列变为可用，然后消费这个序列。明显是给事件处理者使用的。
@@ -33,7 +33,7 @@ public interface SequenceBarrier
      * @throws AlertException       if a status change has occurred for the Disruptor
      * @throws InterruptedException if the thread needs awaking on a condition variable.
      * @throws TimeoutException     if a timeout occurs while waiting for the supplied sequence.
-     */
+     */ // 在sequenceBarrier.waitFor()内部会执行waitStrategy.waitFor()方法实现【生产者和消费者】之间的通信
     long waitFor(long sequence) throws AlertException, InterruptedException, TimeoutException;
 
     /**

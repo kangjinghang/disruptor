@@ -18,7 +18,7 @@ package com.lmax.disruptor;
 /**
  * Coordinates claiming sequences for access to a data structure while tracking dependent {@link Sequence}s
  */
-public interface Sequencer extends Cursored, Sequenced
+public interface Sequencer extends Cursored, Sequenced // 可以理解成RingBuffer的"帮手"，RingBuffer委托Sequencer来处理一些非存储类的工作（不持有数据，仅声明了行为，比如申请sequence，维护sequence进度，发布事件等）
 {
     /**
      * Set to -1 as sequence starting point 序列初始值
@@ -35,7 +35,7 @@ public interface Sequencer extends Cursored, Sequenced
 
     /**
      * Confirms if a sequence is published and the event is available for use; non-blocking.
-     * 判断一个序列是否被发布，并且发布到序列上的事件是可处理的。非阻塞方法
+     * 判断一个序列是否被发布，并且发布到序列上的事件是可被consumer处理的。非阻塞方法
      * @param sequence of the buffer to check
      * @return true if the sequence is available for use, false if not
      */
@@ -44,7 +44,7 @@ public interface Sequencer extends Cursored, Sequenced
     /**
      * Add the specified gating sequences to this instance of the Disruptor.  They will
      * safely and atomically added to the list of gating sequences.
-     * 添加一些追踪序列到当前实例，添加过程是原子的。这些控制序列一般是其他组件的序列，当前实例可以通过这些序列来查看其他组件的序列使用情况。
+     * 添加一些追踪序列到当前实例（RingBuffer的"帮手"AbstractSequencer），添加过程是原子的。这些控制序列一般是其他组件的序列，当前实例可以通过这些序列来查看其他组件的序列使用情况。
      * @param gatingSequences The sequences to add.
      */
     void addGatingSequences(Sequence... gatingSequences);
@@ -65,7 +65,7 @@ public interface Sequencer extends Cursored, Sequenced
      * @return A sequence barrier that will track the specified sequences.
      * @see SequenceBarrier
      */
-    SequenceBarrier newBarrier(Sequence... sequencesToTrack);
+    SequenceBarrier newBarrier(Sequence... sequencesToTrack); // 并发阶段 -> 串行阶段，但是串行阶段获取到的 batch 依赖并发阶段，拿到的这一批需要是并发阶段都处理完的才可以
 
     /**
      * Get the minimum sequence value from all of the gating sequences

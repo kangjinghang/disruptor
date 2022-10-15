@@ -32,7 +32,7 @@ public class EventHandlerGroup<T>
 {
     private final Disruptor<T> disruptor;
     private final ConsumerRepository<T> consumerRepository;
-    private final Sequence[] sequences;
+    private final Sequence[] sequences; // 传递给下一个消费者作为其 sequenceBarrier 即 dependentSequence
 
     EventHandlerGroup(
         final Disruptor<T> disruptor,
@@ -148,7 +148,7 @@ public class EventHandlerGroup<T>
     @SafeVarargs
     public final EventHandlerGroup<T> handleEventsWith(final EventHandler<? super T>... handlers)
     {
-        return disruptor.createEventProcessors(sequences, handlers);
+        return disruptor.createEventProcessors(sequences, handlers); // sequences 作为后面消费者的 dependentSequence
     }
 
     /**

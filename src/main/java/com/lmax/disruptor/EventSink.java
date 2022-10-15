@@ -1,5 +1,5 @@
 package com.lmax.disruptor;
-
+// 提供发布事件(就是往队列上填充数据)的功能，接口上定义了以各种姿势发布事件的方法
 public interface EventSink<E>
 {
     /**

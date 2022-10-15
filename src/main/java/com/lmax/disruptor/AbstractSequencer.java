@@ -31,9 +31,9 @@ public abstract class AbstractSequencer implements Sequencer
         AtomicReferenceFieldUpdater.newUpdater(AbstractSequencer.class, Sequence[].class, "gatingSequences");
 
     protected final int bufferSize;
-    protected final WaitStrategy waitStrategy;
-    protected final Sequence cursor = new Sequence(Sequencer.INITIAL_CURSOR_VALUE); // 对于SingleProducerSequencer是，当前已经生产完成的最大序列值；对于MultiProducerSequencer是，RingBuffer上当前已申请的最大sequence
-    protected volatile Sequence[] gatingSequences = new Sequence[0];
+    protected final WaitStrategy waitStrategy; // 多生产者模式 next() 就会更新cursor，而单生产者模式 publish() 的时候会更新，next() 的时候有时候会更新
+    protected final Sequence cursor = new Sequence(Sequencer.INITIAL_CURSOR_VALUE); // 一般就是生产者的生产进度。对于SingleProducerSequencer是，当前已经生产完成的最大序列值；对于MultiProducerSequencer是，RingBuffer上当前已申请的最大sequence
+    protected volatile Sequence[] gatingSequences = new Sequence[0]; // 就是防止生产者追上赶消费者的 sequenceBarrier
 
     /**
      * Create with the specified buffer size and wait strategy.
@@ -74,11 +74,11 @@ public abstract class AbstractSequencer implements Sequencer
         return bufferSize;
     }
 
-    /**
+    /** 完成了消费者和生产者之间的关联。多个消费者的时候，生产者要考虑消费者们 gatingSequences 的最小消费进度，这样生产者可以检测消费者进度避免覆盖未消费数据
      * @see Sequencer#addGatingSequences(Sequence...)
      */
     @Override
-    public final void addGatingSequences(Sequence... gatingSequences)
+    public final void addGatingSequences(Sequence... gatingSequences) // 执行链的最后一个消费者消费进度关联到生产者
     {
         SequenceGroups.addSequences(this, SEQUENCE_UPDATER, this, gatingSequences);
     }
@@ -93,10 +93,10 @@ public abstract class AbstractSequencer implements Sequencer
     }
 
     /**
-     * @see Sequencer#getMinimumSequence()
+     * @see Sequencer#getMinimumSequence() 生产者不能覆盖最慢消费者的消费进度
      */
     @Override
-    public long getMinimumSequence()
+    public long getMinimumSequence() // 获取消费者们（gatingSequences，消费者们的消费进度序列）和生产者（cursor）的下标中最小的下标
     {
         return Util.getMinimumSequence(gatingSequences, cursor.get());
     }
@@ -106,7 +106,7 @@ public abstract class AbstractSequencer implements Sequencer
      */
     @Override
     public SequenceBarrier newBarrier(Sequence... sequencesToTrack)
-    {
+    {   // 把生产者进度 cursor 传递给 SequenceBarrier，前面消费者的消费进度 sequencesToTrack 作为 gatingSequence
         return new ProcessingSequenceBarrier(this, waitStrategy, cursor, sequencesToTrack);
     }
 

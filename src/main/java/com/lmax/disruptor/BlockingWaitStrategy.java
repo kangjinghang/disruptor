@@ -41,10 +41,10 @@ public final class BlockingWaitStrategy implements WaitStrategy
             lock.lock();
             try
             {
-                while (cursorSequence.get() < sequence) // 再次检测 double check
+                while (cursorSequence.get() < sequence) // 再次检测 double check。 当给定的序号大于生产者游标序号时，进行等待
                 {
-                    barrier.checkAlert(); // 检查序列栅栏状态(事件处理器是否被关闭)
-                    processorNotifyCondition.await(); // 当前线程在processorNotifyCondition条件上等待
+                    barrier.checkAlert(); // 检查序列栅栏状态(事件处理器是否被关闭)。要检查alert状态。如果不检查将导致不能关闭Disruptor（一直在while true 循环中）
+                    processorNotifyCondition.await(); // 当前线程在processorNotifyCondition条件上等待。在Sequencer中publish进行唤醒；等待消费时也会在循环中定时唤醒
                 }
             }
             finally
@@ -53,11 +53,11 @@ public final class BlockingWaitStrategy implements WaitStrategy
             }
         }
         // 这里已经保证了availableSequence必然大于等于sequence，并且在存在依赖的场景中，被依赖消费者存在慢消费的话，
-        // 会直接导致下游进入死循环（此时可能造成cpu升高）。
+        // 会直接导致下游进入死循环（此时可能造成cpu升高，不像47行是 wait 而是 Busy Spin）。
         while ((availableSequence = dependentSequence.get()) < sequence)
-        {
+        {   // 如果进入这里的循环，说明上一组消费者还未消费完毕
             barrier.checkAlert();
-            ThreadHints.onSpinWait();
+            ThreadHints.onSpinWait(); // 使用 Busy Spin 的方式等待上一组消费者完成消费
         }
 
         return availableSequence;

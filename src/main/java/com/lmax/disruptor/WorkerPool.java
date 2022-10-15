@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class WorkerPool<T>
 {
     private final AtomicBoolean started = new AtomicBoolean(false); // 运行状态标识
-    private final Sequence workSequence = new Sequence(Sequencer.INITIAL_CURSOR_VALUE); // 工作序列
+    private final Sequence workSequence = new Sequence(Sequencer.INITIAL_CURSOR_VALUE); // 工作序列，事件处理器数组共用的
     private final RingBuffer<T> ringBuffer; // 事件队列
     // WorkProcessors are created to wrap each of the provided WorkHandlers
     private final WorkProcessor<?>[] workProcessors;  // 事件处理器数组
@@ -102,7 +102,7 @@ public final class WorkerPool<T>
 
     /**
      * Get an array of {@link Sequence}s representing the progress of the workers.
-     *
+     * 可以获取内部事件处理器各自的序列和当前的WorkSequence，用于观察事件处理进度
      * @return an array of {@link Sequence}s representing the progress of the workers.
      */
     public Sequence[] getWorkerSequences()
@@ -119,7 +119,7 @@ public final class WorkerPool<T>
 
     /**
      * Start the worker pool processing events in sequence.
-     *
+     * 会初始化工作序列，然后使用一个给定的执行器（线程池）来执行内部的事件处理器
      * @param executor providing threads for running the workers.
      * @return the {@link RingBuffer} used for the work queue.
      * @throws IllegalStateException if the pool has already been started and not halted yet
@@ -146,11 +146,11 @@ public final class WorkerPool<T>
     /**
      * Wait for the {@link RingBuffer} to drain of published events then halt the workers.
      */
-    public void drainAndHalt()
+    public void drainAndHalt() // 将RingBuffer中所有的事件取出，执行完毕后，然后停止当前WorkerPool
     {
         Sequence[] workerSequences = getWorkerSequences();
         while (ringBuffer.getCursor() > Util.getMinimumSequence(workerSequences))
-        {
+        { // 只要生产进度 > 最小消费者进度，就一直等待（这时候生产者应该停止生产了）
             Thread.yield();
         }
 
@@ -165,7 +165,7 @@ public final class WorkerPool<T>
     /**
      * Halt all workers immediately at the end of their current cycle.
      */
-    public void halt()
+    public void halt() // 马上停止当前WorkerPool
     {
         for (WorkProcessor<?> processor : workProcessors)
         {

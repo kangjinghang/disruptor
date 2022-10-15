@@ -29,13 +29,13 @@ public final class WorkProcessor<T>
     implements EventProcessor
 {
     private final AtomicBoolean running = new AtomicBoolean(false);
-    private final Sequence sequence = new Sequence(Sequencer.INITIAL_CURSOR_VALUE); // 马上要去RingBuffer取数据（要处理的事件）的序列号
+    private final Sequence sequence = new Sequence(Sequencer.INITIAL_CURSOR_VALUE); // 当前 WorkProcessor 要去消费的位置
     private final RingBuffer<T> ringBuffer;
     private final SequenceBarrier sequenceBarrier;
     private final WorkHandler<? super T> workHandler;
     private final ExceptionHandler<? super T> exceptionHandler;
     // 多个处理者对同一个要处理事件的竞争，所以出现了一个workSequence，多个消费者共同使用，大家都从这个sequence里取得序列号，通过CAS保证线程安全
-    private final Sequence workSequence;
+    private final Sequence workSequence; // 多个消费者 WorkProcessor 线程共同使用
 
     private final EventReleaser eventReleaser = new EventReleaser()
     {
@@ -116,8 +116,8 @@ public final class WorkProcessor<T>
 
         boolean processedSequence = true; // 标志位，用来标志一次消费过程
         long cachedAvailableSequence = Long.MIN_VALUE; // 用来缓存消费者可以使用的RingBuffer最大序列号
-        long nextSequence = sequence.get();  // 记录下去RingBuffer取数据（要处理的事件）的序列号
-        T event = null;
+        long nextSequence = sequence.get();  // 记录下当前这个 WorkProcessor 去 RingBuffer 取数据（要处理的事件）的序列号
+        T event = null; // 因为各个消费线程都是共用的一个workSequence，所以通过原子类型设置方法来获取各自消费线程所要消费的下标（sequence，各自线程自己维护），达到了互斥消费
         while (true)
         {
             try
@@ -131,31 +131,31 @@ public final class WorkProcessor<T>
                 {
                     processedSequence = false; // 如果处理完毕，重置标识
                     do
-                    { // 原子的获取下一要处理事件的序列值。
+                    {
                         nextSequence = workSequence.get() + 1L;
-                        sequence.set(nextSequence - 1L);
-                    }
-                    while (!workSequence.compareAndSet(nextSequence - 1L, nextSequence));
+                        sequence.set(nextSequence - 1L); // 给当前 sequence 设消费进度
+                    }  // 因为各个消费线程都是共用的一个workSequence，所以通过CAS来获取各自消费线程所要消费的下标，达到了互斥消费
+                    while (!workSequence.compareAndSet(nextSequence - 1L, nextSequence)); // CAS设置成功，说明当前 WorkProcessor 这个线程抢到了这个槽位
                 }
-                // 检查序列值是否需要申请。这一步是为了防止和事件生产者冲突。
+                // 走到这里说明 nextSequence 这个槽位当前 WorkProcessor 这个线程抢到了，检查序列值是否需要申请。这一步是为了防止和事件生产者冲突。
                 // 如果可使用的最大序列号cachedAvaliableSequence大于等于我们要使用的序列号nextSequence，直接从RingBuffer取数据；不然进入else
-                if (cachedAvailableSequence >= nextSequence)
+                if (cachedAvailableSequence >= nextSequence) // 上次的可用序号 cachedAvailableSequence 还没被消费到，还是可用的
                 {
                     event = ringBuffer.get(nextSequence); // 从RingBuffer上获取事件
                     workHandler.onEvent(event); // 委托给workHandler处理事件
                     processedSequence = true; // 一次消费结束，设置事件处理完成标识
                 }
                 else
-                {
-                    cachedAvailableSequence = sequenceBarrier.waitFor(nextSequence); // 如果需要申请，通过序列栅栏来申请可用的序列，等待生产者生产，获取到最大的可以使用的序列号
+                { // 说明 cachedAvailableSequence < nextSequence，生产者还没生产到 nextSequence 这里，将最新的可用序号赋值给 cachedAvailableSequence
+                    cachedAvailableSequence = sequenceBarrier.waitFor(nextSequence); // 如果需要申请，通过序列栅栏来申请可用的序列，等待生产者生产，获取到ringbuffer即生产者最大的可以使用的序列号
                 }
             }
             catch (final TimeoutException e)
-            {
+            { //  走到这里，processedSequence 还是 false
                 notifyTimeout(sequence.get());
             }
             catch (final AlertException ex) // 处理通知
-            {
+            { //  走到这里，processedSequence 还是 false
                 if (!running.get()) //如果当前处理器被停止，那么退出主循环
                 {
                     break;
